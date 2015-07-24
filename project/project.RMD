@@ -1,0 +1,98 @@
+---
+title: "Coursera - Practical Machine Learning"
+author: "Teddy Rusli"
+date: "Tuesday, July 21, 2015"
+output: html_document
+---
+
+#Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+```{r}
+library(caret)
+library(randomForest)
+library(corrplot)
+library(rpart)
+library(rpart.plot)
+```
+
+#Download data
+
+```{r}
+if (!file.exists("pml-training.csv")) {
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile="pml-training.csv")
+}
+if (!file.exists("pml-testing.csv")) {
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile="pml-testing.csv")
+}
+```
+
+#Load data
+```{r}
+train <- read.csv("pml-training.csv")
+test <- read.csv("pml-testing.csv")
+```
+
+Train data contains 19622 observation and 160 variables. The outcome to predict is the "classe" variable.
+
+#Clean data
+
+```{r}
+train <- train[,colSums(is.na(train)) == 0]
+test <- test[,colSums(is.na(test)) == 0]
+```
+
+After removing columns with NA values, train data is down to 93 variables and test data is down to 60 variables.
+
+```{r}
+classe <- train$classe
+timestamp <- grepl("^X|timestamp|window", names(train))
+train <- train[,!timestamp]
+trainFinal <- train[,sapply(train,is.numeric)]
+trainFinal$classe <- classe
+
+timestamp2 <- grepl ("X|timestamp|window", names(test))
+testFinal <- test[, !timestamp2]
+testFinal <- test[,sapply(test, is.numeric)]
+```
+
+After removing non relevant columns (i.e. timestamps), train data is down to 53 variables, and test data is down to 57 variables.
+
+#Train and predict using Random Forest algorithm.  
+
+Use 5 fold cross validation. 
+
+```{r}
+set.seed(8787)
+inTrain <- createDataPartition(trainFinal$classe, p =0.70, list=F)
+trainData <- trainFinal[inTrain,]
+testData <- trainFinal[-inTrain,]
+
+controlRf <-trainControl(method="cv",5)
+modelRf <- train(classe ~ ., data=trainData, method="rf", trControl=controlRf, ntree=250)
+modelRf
+
+predictRf <- predict(modelRf, testData)
+confusionMatrix(testData$classe, predictRf)
+
+accuracy <- postResample(predictRf, testData$classe)
+accuracy
+sampleError <- 1 - as.numeric(confusionMatrix(testData$classe, predictRf)$overall[1])
+sampleError
+```
+
+Model accuracy is estimated at 99.3% and out of sample error is 0.69%
+
+# Decision tree plot
+```{r}
+decisionTree <- rpart(classe~., data=trainData, method="class")
+prp(decisionTree)
+```
+
+# Predict with test data set
+
+```{r}
+result <- predict(modelRf, testFinal[, -length(names(testFinal))])
+result
+```
